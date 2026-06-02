@@ -67,5 +67,25 @@ Comparison of original results from the paper and replication results from the P
 #### Replicated
 ![Replicated Coefficient Paths Plot](results_export/tstats_paths.png)
 
+---
 
+## 复现扩展(2026):核心结果 + 机器学习延伸
+
+在原仓库 L2 复现之上,本次工作补全了论文的**四个核心结果**并加入一个**机器学习延伸**,
+全部纯 CPU、最小依赖、固定随机种子。详见中文报告 [`REPLICATION_REPORT.md`](REPLICATION_REPORT.md)。
+
+```bash
+uv run python reproduce_all.py   # 一键复现,产出全部图到 outputs/(约 85s)
+```
+
+| 图 | 论文对应 | 文件 |
+|----|----------|------|
+| L2 模型选择(IS/OOS/±se + P&S 对照) | Figure 4a | `outputs/fig1_l2_selection.png` |
+| L1–L2 双惩罚 OOS R² 等高线(raw + PC) | Figure 3a/3b | `outputs/fig2_dual_penalty_contour.png` |
+| SDF 系数在 PC 空间的分布 | Table 1b | `outputs/fig3_pc_coefficients.png` |
+| 稀疏 vs 稠密 OOS R²(+ Sharpe 对比) | Figure 4b | `outputs/fig4_sparsity_frontier.png` |
+| **MLP 延伸**:非线性自适应收缩 vs 线性 ridge | — | `outputs/fig5_mlp_extension.png` |
+
+**核心结论**:复现了"L2 收缩有效、稀疏性只在 PC 空间存在"的全部定性结果;MLP 延伸**诚实地未跑赢**
+线性收缩(OOS R² 0.083 vs 0.220),印证论文"信息分散、线性收缩已近最优"的主张。
 
