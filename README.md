@@ -72,7 +72,8 @@ Comparison of original results from the paper and replication results from the P
 ## 复现扩展(2026):核心结果 + 机器学习延伸
 
 在原仓库 L2 复现之上,本次工作补全了论文的**四个核心结果**并加入一个**机器学习延伸**,
-全部纯 CPU、最小依赖、固定随机种子。详见中文报告 [`REPLICATION_REPORT.md`](REPLICATION_REPORT.md)。
+全部纯 CPU、最小依赖、固定随机种子。详见 [`docs/REPLICATION_REPORT.md`](docs/REPLICATION_REPORT.md)(技术详解)
+与 [`docs/DELIVERY_REPORT.md`](docs/DELIVERY_REPORT.md)(交付报告)。
 
 ```bash
 uv run python reproduce_all.py   # 一键复现,产出全部图到 outputs/(约 85s)
@@ -88,4 +89,16 @@ uv run python reproduce_all.py   # 一键复现,产出全部图到 outputs/(约 
 
 **核心结论**:复现了"L2 收缩有效、稀疏性只在 PC 空间存在"的全部定性结果;MLP 延伸**诚实地未跑赢**
 线性收缩(OOS R² 0.083 vs 0.220),印证论文"信息分散、线性收缩已近最优"的主张。
+
+## 仓库结构
+
+```text
+入口    scs_main.py(阶段1 原样跑通)   reproduce_all.py(阶段2+3 一键复现)
+框架    scs_core / scs_data / scs_plot / dual_penalty
+出图    fig1-4_*.py   mlp_sdf.py        自测  _selftest_core.py
+原仓库  SCS_L2est / cross_validate / utils / load_*.py
+文档    README.md   docs/(REPLICATION_REPORT · DELIVERY_REPORT · Task)
+数据    Data/    产物  outputs/    原始对照图  results_export/
+```
+
 

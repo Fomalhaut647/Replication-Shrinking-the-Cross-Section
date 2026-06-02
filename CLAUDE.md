@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **论文原文**:仓库根目录的 `Shrinking-the-Cross-Section.pdf` 即原文(Kozak, Nagel & Santosh 2020)。需要时用 Read 工具的 `pages` 参数**按页直接读**(原生支持 PDF,公式可正确理解)。**不要转成 md / 文本副本** —— 该论文公式密集(矩阵代数、SDF 推导),普通提取工具会让公式乱码(上下标丢失、符号错位),而高质量 OCR-to-LaTeX 工具与本项目"最小依赖、纯 CPU、无付费"约束冲突,得不偿失。
 
-**任务全文见 `Task.md`** —— 这是用户给的权威任务简报,分阶段推进,**每阶段结束停下汇报、等确认再继续**,报告用中文。下面是必须遵守的硬约束:
+**任务全文见 `docs/Task.md`** —— 这是用户给的权威任务简报,分阶段推进,**每阶段结束停下汇报、等确认再继续**,报告用中文。下面是必须遵守的硬约束:
 
 - **禁止任何付费数据依赖**:没有 WRDS / CRSP / Compustat / IBES,不写需要 API key / 付费订阅 / 拉原始个股数据的代码路径。仓库自带的组合层面收益数据可用。
 - **纯 CPU,禁止 GPU / CUDA**(PyTorch-GPU、cupy 等)。方法是小规模线性代数,数据约 50 列 × 数百~数千行。

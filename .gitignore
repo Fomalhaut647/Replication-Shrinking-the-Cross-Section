@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# 虚拟环境
+.venv/
+
+# 系统垃圾
+.DS_Store
+
+# 注意:outputs/ 与 Data/ 是复现产物与数据,故意纳入版本控制,不忽略。

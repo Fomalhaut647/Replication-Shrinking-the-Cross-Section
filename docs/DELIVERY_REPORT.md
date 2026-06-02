@@ -79,8 +79,7 @@ mlp_sdf.py             阶段3 MLP 延伸
 reproduce_all.py       一键复现(阶段2+3)
 _selftest_core.py      核心模块自测
 requirements.txt       依赖固化
-REPLICATION_REPORT.md  技术详解(每图解释 + 数值对照 + 局限)
-DELIVERY_REPORT.md     本交付报告
+docs/                  REPLICATION_REPORT.md(技术详解) / DELIVERY_REPORT.md(本报告) / Task.md(任务简报)
 outputs/               全部复现图与中间数据
 ```
 
