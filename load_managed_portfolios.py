@@ -15,7 +15,8 @@ def load_managed_portfolios(filename, daily=True, drop_perc=1, omit_prefixes=Non
         date_format = '%m/%Y'
     
     # Read DATA from CSV and parse dates
-    DATA = pd.read_csv(filename, parse_dates=["date"], dayfirst=False, date_parser=lambda x: datetime.strptime(x, date_format))
+    # Note: pandas >=2.0 removed `date_parser`; use `date_format` instead.
+    DATA = pd.read_csv(filename, parse_dates=["date"], date_format=date_format)
     
     # If keeponly is specified, filter columns based on it
     if keeponly:

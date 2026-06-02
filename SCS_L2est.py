@@ -232,7 +232,7 @@ def SCS_L2est(dates, re, market, freq, anomalies, parameters):
     cv_idx_test = params['cv_idx_test'] 
 
     # Effective degrees of freedom
-    df = np.sum(d.reshape(50,1) / (d.reshape(50,1) + np.array(l).reshape(1,100)), axis=0)
+    df = np.sum(d.reshape(-1,1) / (d.reshape(-1,1) + np.array(l).reshape(1,-1)), axis=0)
 
     # Optimal L2 model
     # Note: You need to define the optfunc function in Python or provide its MATLAB code for translation
@@ -468,5 +468,18 @@ def table_L2coefs(phi, se, anomalies, p):
     print(df)
 
     # export as a latex formatted table
+    # Note: pandas>=3.0 routes DataFrame.to_latex through Styler, which pulls in
+    # the optional jinja2 dependency. To honor the project's minimal-dependency
+    # constraint we emit a plain LaTeX tabular by hand instead.
     if p['results_export']:
-        df.to_latex('results_export/coefficients_table.tex', index=False)
+        ncols = df.shape[1]
+        align = 'l' + 'r' * (ncols - 1)
+        rows = [r'\begin{tabular}{' + align + '}', r'\toprule',
+                ' & '.join(df.columns) + r' \\', r'\midrule']
+        for _, row in df.iterrows():
+            cells = [f'{v:.6f}' if isinstance(v, (int, float, np.floating)) else str(v)
+                     for v in row]
+            rows.append(' & '.join(cells) + r' \\')
+        rows += [r'\bottomrule', r'\end{tabular}', '']
+        with open('results_export/coefficients_table.tex', 'w') as fh:
+            fh.write('\n'.join(rows))

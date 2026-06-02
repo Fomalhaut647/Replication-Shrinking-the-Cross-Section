@@ -1,0 +1,8 @@
+# Kozak, Nagel & Santosh (2020) "Shrinking the Cross-Section" 复现
+# 纯 CPU、最小依赖。Python 3.14(见 .python-version);亦兼容 3.12+。
+# 推荐用 uv:  uv sync  &&  uv run python reproduce_all.py
+# 或 pip:     pip install -r requirements.txt
+numpy==2.4.6
+pandas==3.0.3
+matplotlib==3.10.9
+scipy==1.17.1

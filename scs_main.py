@@ -23,7 +23,7 @@ run_folder = datetime.today().strftime('%d%b%Y').upper() + "/"
 # Paths
 projpath = ''
 datapath = os.path.join(projpath, 'Data')
-instrpath = os.path.join(datapath, 'instruments')
+instrpath = os.path.join(datapath, 'Instruments')
 
 # Initialize
 if daily:
