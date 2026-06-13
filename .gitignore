@@ -11,3 +11,20 @@ __pycache__/
 .DS_Store
 
 # 注意:outputs/ 与 Data/ 是复现产物与数据,故意纳入版本控制,不忽略。
+
+# LaTeX 编译产物
+report/*.aux
+report/*.log
+report/*.out
+report/*.toc
+report/*.fls
+report/*.fdb_latexmk
+report/*.synctex.gz
+
+# 隐私:真实姓名/学号(authors.local.tex)与内嵌真名的编译 PDF 不入(公开)仓库。
+# 公开仓库的 report.tex 用占位符;本地 cp authors.local.tex.example authors.local.tex 填真名后编译。
+report/authors.local.tex
+report/report.pdf
+
+# 课程内部材料(含助教邮箱与提交细节),不入公开仓库
+作业要求.md

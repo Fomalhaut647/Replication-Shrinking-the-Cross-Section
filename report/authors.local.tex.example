@@ -1,0 +1,6 @@
+% 模板:复制本文件为 authors.local.tex 并填入真实姓名/学号/专业。
+%   cp authors.local.tex.example authors.local.tex   然后编辑
+% authors.local.tex 已被 .gitignore 排除,不会进入(公开)git 仓库;
+% report.tex 编译时若检测到 authors.local.tex 则自动覆盖下面的占位符。
+\renewcommand{\memberA}{组员甲}\renewcommand{\sidA}{学号A}\renewcommand{\majorA}{专业A}
+\renewcommand{\memberB}{组员乙}\renewcommand{\sidB}{学号B}\renewcommand{\majorB}{专业B}

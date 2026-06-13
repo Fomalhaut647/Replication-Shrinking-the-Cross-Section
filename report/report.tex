@@ -1,0 +1,411 @@
+\documentclass[11pt,a4paper]{ctexart}
+% ============================================================
+% 金融计量小组作业 —— 复现 Kozak, Nagel & Santosh (2020)
+% "Shrinking the Cross-Section" (Journal of Financial Economics)
+% 中文 LaTeX(ctex + 已装开源字体),纯本地可编译:xelatex report.tex
+% ============================================================
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{geometry}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage[hidelinks]{hyperref}
+\usepackage{array}
+\usepackage{float}
+\geometry{margin=2.4cm}
+\captionsetup{font=small,labelfont=bf}
+
+% 已装开源中文字体(fandol 未装,改用 AR PL UMing 宋体 + Droid Sans Fallback)
+\setCJKmainfont[AutoFakeBold=3,AutoFakeSlant=0.15]{AR PL UMing CN}
+\setCJKsansfont[AutoFakeBold=3]{Droid Sans Fallback}
+\setCJKmonofont{Droid Sans Fallback}
+
+\graphicspath{{../outputs/}{../results_export/}}
+\newcommand{\Eb}{\mathbb{E}}
+\newcommand{\Rtwo}{R^2}
+
+% ===== 隐私脱敏:真实姓名/学号/专业放在 gitignored 的 authors.local.tex(不进公开仓库)=====
+% 公开仓库只含占位符;本地若存在 authors.local.tex 则覆盖为真实信息(模板见 authors.local.tex.example)。
+\newcommand{\memberA}{组员甲}\newcommand{\sidA}{学号A}\newcommand{\majorA}{专业A}
+\newcommand{\memberB}{组员乙}\newcommand{\sidB}{学号B}\newcommand{\majorB}{专业B}
+\IfFileExists{./authors.local.tex}{\input{./authors.local.tex}}{}
+
+\title{\textbf{收缩横截面:Kozak、Nagel 与 Santosh (2020) 的复现与机器学习延伸}}
+\author{\memberA\,\sidA\quad \memberB\,\sidB\\[2pt]\small 北京大学\quad 金融计量\quad 第三组}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent 本文复现 Kozak、Nagel 与 Santosh (2020, \emph{Journal of Financial Economics}, 以下简称 KNS)
+``Shrinking the Cross-Section''。该文构造一个对低方差主成分(PC)施加更强收缩的稳健随机折现因子
+(SDF),论证\textbf{对所有 anomaly 因子的主成分做 L2(ridge)收缩,远胜于只保留少数因子的稀疏模型}。
+我们在纯 CPU、最小依赖、无任何付费数据的约束下:(i) 让原 Python 移植版跑通并\textbf{一键复现论文四个
+核心结果};(ii) 完成一个诚实的机器学习延伸;(iii) 在此之上新增\textbf{五项扩展与稳健性分析}——
+字面 $\eta{=}1$ 的 Pástor--Stambaugh 对照、\textbf{可学收缩形状 $\eta$ 的广义收缩曲线}、分块 bootstrap
+置信区间、去 look-ahead 的 train-only PC 旋转、以及 FF25 预备分析。核心发现完整重现:收缩必要、相对
+(relative)收缩是关键、稀疏性只在 PC 空间存在;机器学习延伸\textbf{诚实地表明赋予收缩函数额外灵活度
+没有统计显著的样本外提升}——印证论文``信息分散、线性相对收缩已近最优''的主张。全部结果由
+\texttt{reproduce\_all.py} 约 2 分钟一键复现,随机种子固定。
+\end{abstract}
+
+% ============================================================
+\section{引言与论文核心主张}
+% ============================================================
+实证资产定价发现了大量能预测股票横截面收益的特征(characteristics)。主流做法是用少数``特征因子''
+(如 Fama--French 三/五因子)去概括,即寻找一个\textbf{特征稀疏}(characteristics-sparse)的 SDF。
+KNS 质疑这一范式:面对数十乃至上千个候选因子,横截面回归会严重过拟合均值噪声,样本外表现差;而经济学
+(无近似套利)告诉我们,赚取显著风险溢价的因子必然是协方差的主要来源,即定价信息应集中于\textbf{高方差
+主成分}。据此他们提出一个贝叶斯先验,对 SDF 系数施加\textbf{随特征值递增}的收缩,并用样本外横截面 $\Rtwo$
+做交叉验证选超参。
+
+\textbf{论文三个核心论断},也是本文复现主线:
+\begin{enumerate}
+  \item \textbf{需要收缩,且相对收缩是关键。}无收缩的朴素估计样本外崩溃;只做等比例(level)收缩的
+  Pástor--Stambaugh($\eta{=}1$)远不如对低方差 PC 收缩更狠的相对(relative,$\eta{=}2$)收缩。
+  \item \textbf{特征空间几乎不存在稀疏性。}强制只保留少数原始 anomaly 因子会急剧恶化样本外表现——
+  说明 anomaly 之间冗余很少。
+  \item \textbf{稀疏性只在 PC 空间存在。}少数几个高方差 PC 即可很好地近似 SDF,但定价信息其实分散在约
+  二十个 PC 上,而非集中于前几个。
+\end{enumerate}
+
+\textbf{本文贡献。}在 lukaskoerber 的 Python 移植版上,我们(1)修复移植 bug 使其在 Python 3.14 +
+pandas 3 跑通;(2)用统一口径复现上述四个核心结果(图 1--4);(3)完成一个极小 MLP 的非线性收缩延伸
+(图 5);(4)\textbf{新增五项扩展}(图 6--8 及 bootstrap):字面 $\eta{=}1$ 对照、广义收缩曲线(学 $\eta$)、
+分块 bootstrap 置信区间、去 look-ahead、FF25 预备分析。全程纯 CPU、最小依赖、固定随机种子。
+
+% ============================================================
+\section{数据}
+% ============================================================
+所有数据均为\textbf{组合层面收益}或 Ken French 公开免费数据,\textbf{无任何付费来源}(无 WRDS / CRSP /
+Compustat / IBES)。
+\begin{itemize}
+  \item \textbf{50 个 anomaly 多空组合}(主数据集,\texttt{managed\_portfolios\_anom\_d\_50.csv}):
+  日度,1963-07 至 2017-12,$T\approx 11{,}000$。每列是一个基于某 anomaly 特征排序构造的零投资多空组合收益,
+  外加市场超额收益 \texttt{rme}。这是论文 4.2 节、图 3/4、表 1 的主战场。
+  \item \textbf{FF25}(25 个 size/BM 组合)+ Fama--French 因子:Ken French 数据库公开免费,论文 4.1 节
+  用作``已知答案''的低维预备分析(见第 \ref{sec:r1} 节扩展 R1)。
+\end{itemize}
+预处理(与原仓库一致):对每列回归剔除市场 $\beta$(de-market),再标准化到市场波动率(de-vol)。于是因子
+$F$ 是\textbf{对市场正交化的多空组合},SDF 只解释市场之外的横截面差异。
+
+% ============================================================
+\section{方法}\label{sec:method}
+% ============================================================
+\subsection{SDF 与收缩先验}
+在收益张成空间内寻找 SDF(Hansen--Jagannathan):
+\begin{equation}
+  M_t = 1 - b'\big(F_t - \Eb[F_t]\big),\qquad \Eb[M_t F_t]=0
+  \;\Rightarrow\; b = \Sigma^{-1}\Eb[F_t],
+\end{equation}
+其中 $\Sigma=\operatorname{Cov}(F_t)$。朴素样本估计 $\hat b=\bar\Sigma^{-1}\bar\mu$ 在高维下严重过拟合
+均值噪声。把因子旋到主成分空间,$\Sigma=QDQ'$,$D=\operatorname{diag}(d_1,\dots,d_N)$(特征值降序),
+$P_t=Q'F_t$。KNS 设如下先验族:
+\begin{equation}
+  \mu \sim \mathcal{N}\!\Big(0,\ \tfrac{\kappa^2}{\tau}\Sigma^{\eta}\Big),\qquad \tau=\operatorname{tr}(\Sigma),
+  \label{eq:prior}
+\end{equation}
+$\kappa$ 控制先验``尺度''(预期最大平方 Sharpe),\textbf{$\eta$ 控制``形状''}。在 PC 空间,PC 的 Sharpe
+方差正比于 $d_j^{\eta-1}$:$\eta{=}0$ 使低方差 PC 的 Sharpe 发散(近似套利,不合理);$\eta{=}1$ 令所有 PC
+同等 Sharpe(Pástor--Stambaugh);\textbf{$\eta{=}2$ 使高方差 PC 的 Sharpe 更大}(经济上合理,且保证组合
+权重有界)。KNS 取 $\eta{=}2$。
+
+\subsection{收缩估计量与相对收缩}
+在 $\Sigma$ 已知($\eta{=}2$)下,后验均值即岭回归形式:
+\begin{equation}
+  \hat b = (\Sigma + \gamma I)^{-1}\bar\mu,\qquad \gamma=\frac{\tau}{\kappa^2 T},
+  \label{eq:ridge}
+\end{equation}
+其 PC 空间表达式揭示\textbf{相对收缩}的本质:
+\begin{equation}
+  \hat b_{P,j} = \underbrace{\frac{d_j}{d_j+\gamma}}_{\text{收缩权重 }w_j}\cdot\underbrace{\frac{\bar\mu_{P,j}}{d_j}}_{\text{OLS 系数}},
+  \label{eq:bpc}
+\end{equation}
+即低特征值 $d_j$ 的 PC 收缩更狠($w_j$ 更小)。$\kappa$ 与 $\gamma$ 经
+$\Eb[\mu'\Sigma^{-1}\mu]^{1/2}=\kappa$ 互换,使惩罚强度有``根预期最大平方 Sharpe''的经济解读。
+
+\subsection{双惩罚(稀疏)与样本外口径}
+为容许稀疏,加 $L^1$ 惩罚得 elastic-net 型估计(论文式 28):
+\begin{equation}
+  \hat b = \arg\min_b\ (\bar\mu-\Sigma b)'\Sigma^{-1}(\bar\mu-\Sigma b) + \gamma_2\,b'b + \gamma_1\|b\|_1 .
+  \label{eq:enet}
+\end{equation}
+超参由 $K$ 折\textbf{连续块}交叉验证选取,样本外横截面 $\Rtwo$(论文式 30)为
+\begin{equation}
+  \Rtwo_{\text{oos}} = 1 - \frac{(\bar\mu_2-\bar\Sigma_2\hat b)'(\bar\mu_2-\bar\Sigma_2\hat b)}{\bar\mu_2'\bar\mu_2},
+  \label{eq:r2oos}
+\end{equation}
+下标 2 表示留出折的样本矩。我们把它实现为纯函数核心 \texttt{scs\_core.py},并用 \texttt{\_selftest\_core.py}
+验证:elastic-net 在 $\gamma_1{=}0$ 时严格退化为纯 L2(误差 $\sim10^{-15}$),OOS 曲线复现原仓库口径。
+
+\subsection{一般 $\eta$ 的统一收缩(本文用于 R4 与 EXT)}\label{sec:general-eta}
+我们由先验 \eqref{eq:prior} 推导出\textbf{任意 $\eta$} 的 PC 空间后验(与 KNS 一般化先验一致),并经独立核对:
+\begin{equation}
+  \hat b_{P,j}(\eta,\gamma) = \frac{\bar\mu_{P,j}}{\,d_j + \gamma\,d_j^{\,2-\eta}\,}
+  = w_j(\eta,\gamma)\cdot\frac{\bar\mu_{P,j}}{d_j},\qquad
+  \boxed{\,w_j(\eta,\gamma)=\frac{d_j^{\,\eta-1}}{d_j^{\,\eta-1}+\gamma}\,}.
+  \label{eq:eta-weight}
+\end{equation}
+$\eta{=}2$ 给 \eqref{eq:bpc} 的 ridge;$\eta{=}1$ 给\textbf{常数权重}(对 OLS 系数等比例缩放 $1/(1+\gamma)$,
+即字面 level 收缩);$w_j$ 是一条随 $d_j$ 单调的收缩曲线。这个统一形式让本文的字面 P\&S(R4)、广义收缩
+曲线(EXT)与去 look-ahead(R2)共用同一段经过验证的代码:$\eta{=}2$ 时它精确退化为原 ridge(自测误差
+$8.4\times10^{-15}$)。
+
+% ============================================================
+\section{核心复现结果}\label{sec:core}
+% ============================================================
+四张核心图均采用式 \eqref{eq:r2oos} 的同一把尺子(3 折连续块 CV)。表 \ref{tab:numbers} 汇总关键数值与论文对照。
+
+\begin{table}[H]\centering\small
+\caption{核心复现数值与论文对照(50 anomaly,日度)}\label{tab:numbers}
+\begin{tabular}{lcc}
+\toprule
+指标 & 本复现 & 论文 \\
+\midrule
+OOS CV 峰值 $\Rtwo$(图 1) & $0.252$ @ $\kappa^*{=}0.285$ & $\approx0.30$ @ $\kappa{\approx}0.30$ \\
+$\le 10$ 非零时最高 OOS:PC vs 特征(图 2) & $0.233$ vs $0.108$ & PC$\gg$特征 \\
+$|t|$ 最大的 PC 序(图 3) & PC5,PC1,PC2,PC4,PC11\dots & PC5,PC1,PC2,PC4,PC11\dots \\
+PC-sparse 4 因子 OOS(图 4) & $0.209$ & $\approx0.18$ \\
+特征-sparse 4 因子 OOS(图 4) & $0.020$ & 低 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{图 1 —— L2 模型选择}
+图 \ref{fig:fig1} 横轴为先验强度 $\kappa$($\kappa$ 大则惩罚 $\gamma$ 弱),纵轴横截面 $\Rtwo$。样本内
+(蓝虚线)随 $\kappa$ 单调升至 $0.88$——把均值的样本噪声也拟合进去,虚高;OOS(橙实线)呈驼峰,内点最优
+\textbf{峰值 $0.252$ @ $\kappa^*{=}0.285$},即数据驱动选出的最优收缩。这正是``需要收缩''的核心证据。图中
+金色点划线是\textbf{字面 $\eta{=}1$ level 收缩}(扩展 R4,见第 \ref{sec:r4} 节),其最优仅 $0.063$,远逊于
+relative 收缩。
+
+\begin{figure}[H]\centering
+\includegraphics[width=0.74\textwidth]{fig1_l2_selection.png}
+\caption{图 1 —— L2 模型选择(论文 Figure 4a)。relative 收缩($\eta{=}2$)OOS 峰值 $0.252$;字面
+level 收缩($\eta{=}1$,扩展 R4)最优仅 $0.063$,且其最优惩罚比 relative 强约两个数量级(两驼峰分居左右),
+印证``相对收缩是关键''。}\label{fig:fig1}
+\end{figure}
+
+\subsection{图 2 —— L1--L2 双惩罚等高线}
+图 \ref{fig:fig2} 为双 panel 热图:横轴 $\kappa$(L2 强度),纵轴非零系数个数(L1 稀疏度,对数),颜色为
+OOS $\Rtwo$。(a) 原始 50 anomaly 的高分区集中在\textbf{高非零数}(几乎无法稀疏);(b) 其主成分的高分区
+\textbf{延伸到很低的非零数}。非零数 $\le 10$ 时,PC 空间最高 OOS $=0.233$ 而特征空间仅 $0.108$。
+\textbf{这是``稀疏性只在 PC 空间存在''的直接证据}。
+
+\begin{figure}[H]\centering
+\includegraphics[width=0.92\textwidth]{fig2_dual_penalty_contour.png}
+\caption{图 2 —— L1--L2 双惩罚 OOS $\Rtwo$ 等高线(论文 Figure 3a/3b)。左:原始特征;右:主成分。
+高分区在 PC 空间延伸到极低的非零数,特征空间则否。}\label{fig:fig2}
+\end{figure}
+
+\subsection{图 3 —— SDF 系数在 PC 空间的分布}
+在最优 $\kappa^*$ 下把 SDF 系数旋到 PC 空间(式 \ref{eq:bpc}),图 \ref{fig:fig3} 展示各 PC 的 $|t|$ 统计量。
+$|t|$ 最大者依次为 PC5、PC1、PC2、PC4、PC11、PC15、PC10\dots,与论文表 1b \textbf{几乎逐项一致}。大载荷
+偏向高方差 PC,但 PC10/11/15 等中等方差 PC 也带可观载荷——\textbf{信息分散在约二十个 PC 上},而非集中
+于前几个,这正是论文反对特征稀疏、支持 PC 收缩的依据。
+
+\begin{figure}[H]\centering
+\includegraphics[width=0.86\textwidth]{fig3_pc_coefficients.png}
+\caption{图 3 —— 最优收缩下 SDF 系数在 PC 空间的 $|t|$ 统计量与系数(论文 Table 1b)。}\label{fig:fig3}
+\end{figure}
+
+\subsection{图 4 —— 稀疏 vs 稠密}
+图 \ref{fig:fig4} 横轴为进入 SDF 的因子数,纵轴是该稀疏度下扫遍所有 L2 强度能达到的最大 OOS $\Rtwo$
+(图 2 等高线的``山脊'')。\textbf{PC 快升}(2 个 PC$\to$0.17,4 个$\to$0.21,10 个$\to$0.23,近最大);
+\textbf{特征慢升}(4 个$\to$0.02,需约 50 个才追平)。样本外年化 Sharpe:稠密 L2(50 因子)显著高于稀疏
+L1(约 2 因子)。这是``特征稀疏不成立、PC 稀疏成立''最直接的样本外证据。
+
+\begin{figure}[H]\centering
+\includegraphics[width=0.70\textwidth]{fig4_sparsity_frontier.png}
+\caption{图 4 —— 稀疏 vs 稠密 OOS $\Rtwo$(论文 Figure 4b)。PC 线快速饱和,特征线缓慢上升。}\label{fig:fig4}
+\end{figure}
+
+% ============================================================
+\section{机器学习延伸:极小 MLP 的非线性自适应收缩}\label{sec:mlp}
+% ============================================================
+论文的线性估计在 PC 空间等价于对每个 PC 施加固定曲线 $w(d)=d/(d+\gamma)$ 的收缩。作为``AI 增量''的第一步,
+我们把它替换为一个\textbf{极小浅层 MLP}(1 隐层、16 神经元、输入仅 $\log d_j$、scipy L-BFGS 训练、解析梯度
+经数值校验)学到的\textbf{自适应惩罚} $\gamma_j$,在与四张图完全一致的 3 折 OOS 口径下与线性 ridge 对比
+(test 块完全留出,MLP 仅在 train 块内部再分 fit/val,无数据泄漏)。
+
+\textbf{结果(诚实):MLP 未跑赢}——线性 ridge OOS $\Rtwo\approx0.22$ vs Tiny MLP $\approx0.07$(图 \ref{fig:fig5})。
+这不是调参失败,而是一个有价值的发现:SDF 系数被均值噪声主导、定价信息分散,需要\textbf{强结构化、不可
+从样本内过度优化}的收缩;赋予模型额外非线性灵活度只会让它倾向欠收缩、损害样本外表现。我们没有为了好看
+把结果调成 MLP 赢。第 \ref{sec:ext} 节的广义收缩曲线从``可解释旋钮''角度进一步坐实这一结论。
+
+\begin{figure}[H]\centering
+\includegraphics[width=0.86\textwidth]{fig5_mlp_extension.png}
+\caption{图 5 —— 极小 MLP 自适应收缩 vs 线性 ridge。左:MLP 学到的收缩曲线大体贴合 ridge;右:OOS $\Rtwo$
+对比,MLP 明显不优于线性。}\label{fig:fig5}
+\end{figure}
+
+% ============================================================
+\section{扩展与稳健性分析}\label{sec:ext}
+% ============================================================
+本节是本组在复现之外新增的工作,共五项,全部纯 CPU、固定种子、并入一键复现。
+
+\subsection{EXT —— 广义收缩曲线:把收缩形状 $\eta$ 当成可学旋钮}\label{sec:gen}
+论文\emph{固定} $\eta{=}2$。我们把 $\eta$ 当作可学的``收缩形状'',用与四张图完全一致的 3 折 OOS 口径联合
+搜索 $(\eta,\gamma)$,检验``赋予收缩曲线更大灵活度能否超过 $\eta{=}2$''。收缩权重由式 \eqref{eq:eta-weight}
+的 $w_j(\eta,\gamma)$ 给出,这本身就是一条单调收缩曲线;每折采用 train-only 旋转(无 look-ahead)。
+
+图 \ref{fig:fig7}(a) 是``各 $\eta$ 扫遍 $\gamma$ 的最优 OOS''曲线:从 $\eta{=}0$(近似套利,崩溃)陡升,
+\textbf{在 $\eta\in[3,4]$ 形成宽平顶}(峰 $\approx0.29$),$\eta{>}4$ 缓降(趋近过度 PC-sparse)。学到的
+$\eta^*\approx3.6$ 给 OOS $0.292$,相对论文固定 $\eta{=}2$ 的 $0.252$ \textbf{增益 $+0.04$}。图 \ref{fig:fig7}(b)
+显示学到的曲线($\eta^*$)比 $\eta{=}2$ \emph{更陡}——数据偏好对低方差 PC \emph{更强}的相对收缩。
+
+\textbf{诚实解读:这 $+0.04$ 的增益没有统计显著性}(见第 \ref{sec:r3} 节 bootstrap,$\Delta$ 的 95\% CI
+含 0)。其意义是双重的:(i) 学收缩形状\textbf{无显著样本外提升},即\textbf{线性相对收缩已近最优},与图 5
+的 MLP 结论一致;(ii) 数据若有偏好,是偏向 $\eta{>}2$(\emph{更强}的相对收缩)——这与论文``$\eta\ge2$、低方差
+PC 该收得更狠''的经济论证\textbf{同向并强化},而非反例。论文取 $\eta{=}2$ 是``保证组合权重有界的最小 $\eta$'',
+我们的结果说明 $\eta{=}2$ 落在 OOS 平顶的左肩、是稳健合理的选择。
+
+\begin{figure}[H]\centering
+\includegraphics[width=0.96\textwidth]{fig7_generalized_shrinkage.png}
+\caption{图 7(EXT)—— 广义收缩曲线。(a) 各 $\eta$ 的最优 OOS:升--宽平顶($\eta^*{\approx}3.6$)--缓降;
+(b) 学到的收缩曲线 $w(d)$ 比 $\eta{=}2$ 更陡,但二者样本外无显著差异(见 R3)。}\label{fig:fig7}
+\end{figure}
+
+\subsection{R4 —— 字面 $\eta{=}1$ 的 Pástor--Stambaugh 对照}\label{sec:r4}
+Pástor--Stambaugh(2000)对应 $\eta{=}1$ 的 level(等比例)收缩。我们用式 \eqref{eq:eta-weight} 的\textbf{字面
+$\eta{=}1$ 后验} $\hat b_{P,j}=\bar\mu_{P,j}/(d_j(1+\gamma))$ 替换原仓库的 level 重参数化,叠加于图 \ref{fig:fig1}。
+由于 level 与 relative 收缩的自然惩罚尺度相差约两个数量级(它们的最优驼峰在 $\kappa$ 轴上分居左右,正是
+论文脚注所言``$\eta{=}1$ 下 $x$ 轴不再等于 $\kappa$''),我们让 level 在其\emph{自身}惩罚范围内扫到最优:
+\textbf{最优仅 $\Rtwo_{\text{oos}}=0.063$},约为 relative 收缩 $0.252$ 的四分之一。这比原仓库重参数化版
+($0.038$)更有原则,定性结论一致:\textbf{等比例收缩远逊于相对收缩}。
+
+\subsection{R3 —— 分块 bootstrap 置信区间}\label{sec:r3}
+我们用\textbf{无泄漏的循环分块 bootstrap}(块长 21 个交易日,保留序列相关)给关键 OOS 数值加 95\% 置信区间。
+\emph{方法上的一个教训:}朴素地``重采样整条序列再切 CV''会让同一原始观测同时落进 train 与 test 折,造成
+泄漏(实测把 OOS 抬到 $\sim0.8$);正确做法是\textbf{在每折的 train、test 时段各自独立重采样}(两段不相交、
+无泄漏)。结果(表 \ref{tab:boot}):
+\begin{itemize}
+  \item $\eta{=}2$ relative 收缩 OOS $=0.252$,\textbf{95\% CI $[0.014,\,0.377]$,显著大于 0}——收缩本身确实有效。
+  \item EXT 的增益 $\Delta=\Rtwo(\eta^*{=}3.6)-\Rtwo(\eta{=}2)$ 的 95\% CI $=[-0.080,\,+0.109]$,\textbf{含 0,不显著}
+  ——坐实``学收缩形状无显著提升、$\eta{=}2$ 近最优''。
+\end{itemize}
+置信区间偏宽(横截面均值的估计本就是论文强调的最脆弱环节),诚实地反映了样本外定价的内在不确定性。
+
+\begin{table}[H]\centering\small
+\caption{分块 bootstrap 置信区间(50 anomaly,$n_{\text{boot}}{=}300$,块长 21)}\label{tab:boot}
+\begin{tabular}{lcc}
+\toprule
+模型 & 点估计 OOS $\Rtwo$ & 95\% CI \\
+\midrule
+$\eta{=}1$(level) & $0.063$ & $[-0.001,\ 0.219]$ \\
+$\eta{=}2$(relative,KNS) & $0.252$ & $[0.014,\ 0.377]$ \\
+$\eta^*{=}3.6$(学到) & $0.292$ & $[0.034,\ 0.411]$ \\
+\midrule
+增益 $\Delta=\Rtwo(\eta^*)-\Rtwo(\eta{=}2)$ & $+0.040$ & $[-0.080,\ +0.109]$(含 0) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{R2 —— 去 look-ahead:train-only 的 PC 旋转}\label{sec:r2}
+复现主线把因子旋到 PC 空间用的是\textbf{全样本}协方差的特征向量 $Q$,训练块``看到''了测试块参与估计的
+$Q$——轻微 look-ahead。我们严格量化它,结论分两类(图 \ref{fig:fig8}):
+\begin{itemize}
+  \item \textbf{纯 L2 ridge}(图 1 主线、图 4 的 L2 包络):各向同性惩罚 $\gamma I$ 下 ridge \emph{旋转等变},
+  OOS $\Rtwo$ 与 $Q$ 的选择\textbf{精确无关}——全样本 $Q$ 与 train-only $Q$ 的差数值上为 $3.3\times10^{-15}$
+  (机器精度,严格为 0)。
+  \item \textbf{PC-sparse}(L1 选 PC,旋转相关):比较两版的\emph{全局最优} OOS,train-only $Q$ 给 $0.269$,
+  \emph{不低于}全样本 $Q$ 的 $0.252$——\textbf{look-ahead 并未抬高主线 PC 结果},反而去掉后略升。
+\end{itemize}
+此外,第 \ref{sec:gen} 节的广义收缩曲线(及图 1 的 $\eta{=}1$)\textbf{默认即用 train-only $Q$},本无此 look-ahead。
+故论文的 PC 结论在去 look-ahead 后稳健。
+
+\begin{figure}[H]\centering
+\includegraphics[width=0.58\textwidth]{fig8_r2_lookahead.png}
+\caption{图 8(R2)—— PC 旋转 $Q$ 的 look-ahead。纯 L2 旋转不变(差 $\sim10^{-15}$);PC-sparse 全局最优
+train-only $Q$ 不低于全样本 $Q$,主线结果未被抬高。}\label{fig:fig8}
+\end{figure}
+
+\subsection{R1 —— FF25 预备分析(负对照与低维性)}\label{sec:r1}
+论文 4.1 节在 FF25 这个``已知答案''的低维场景验证方法能恢复出类似 SMB/HML 的少因子 SDF。我们把与 50
+anomaly \textbf{完全一致}的 KNS 管线套到 FF25(同窗 1963--2017),发现(图 \ref{fig:fig6}):
+\begin{itemize}
+  \item (a) FF25 \textbf{维度更低}——前 3 个 PC 占 65\% 方差(50 anomaly 更分散),契合论文用它作低维 warm-up。
+  \item (b) 但去市场后的\textbf{残差截面样本外 OOS $\Rtwo\approx0$}(且 $\pm$ 巨大标准误):size/value 残差
+  溢价时变性强,3 折时间切分下样本外几乎不可预测。
+\end{itemize}
+这是一个有价值的\textbf{负对照}:同一管线在\emph{无稳定信号}时如实返回约 0,反证 50 anomaly 上的 $0.25$
+\textbf{不是机械造出来的}。同时它说明 KNS 方法的样本外价值\textbf{特定地体现在高维 anomaly 截面},而非经典
+低维 FF25——这与论文``多维挑战只在高维才尖锐''的立意一致。
+
+\begin{figure}[H]\centering
+\includegraphics[width=0.96\textwidth]{fig6_ff25_sparsity.png}
+\caption{图 6(R1)—— FF25 预备分析。(a) FF25 比 50 anomaly 维度更低(累计方差);(b) 去市场残差截面
+OOS $\Rtwo\approx0$(时变溢价),作为负对照。}\label{fig:fig6}
+\end{figure}
+
+% ============================================================
+\section{已知局限}
+% ============================================================
+\begin{itemize}
+  \item \textbf{de-market 的全样本 $\beta$}:与论文口径一致,属轻微 look-ahead;因日度样本极大而稳定。
+  \item \textbf{图 3 的 PC 系数}为最优 $\kappa^*$ 下的样本内描述量,其 PC 旋转用全样本 $Q$(描述性,固有)。
+  \item \textbf{bootstrap 置信区间偏宽}:仅 3 折 + 横截面均值估计噪声大;这是诚实反映而非缺陷。
+  \item \textbf{$\eta^*\approx3.6$ 贴近搜索上界邻域}:我们已扩展到 $\eta\in[0,6]$ 确认平顶与回落,$\eta^*$ 不是
+  网格边界假象;但平顶较平、$\eta^*$ 的精确值不被尖锐识别(故其相对 $\eta{=}2$ 的增益不显著)。
+  \item \textbf{无付费数据}:无法复现论文上千个特征交互的超高维数据集;主线 50 anomaly 已足以支撑全部定性结论。
+\end{itemize}
+
+% ============================================================
+\section{小组分工}
+% ============================================================
+本组为\textbf{第三组},成员二人如下。\textbf{具体分工待小组确认后填写}(本表``主要工作''列暂留空,已明确标出)。
+
+\begin{table}[H]\centering\small
+\caption{小组成员(第三组)}
+\begin{tabular}{p{3.8cm} p{3.4cm} p{6.9cm}}
+\toprule
+姓名(学号) & 专业 & 主要工作(分工) \\
+\midrule
+\memberA(\sidA) & \majorA\,\footnotemark & \textsf{[待小组填写]} \\
+\addlinespace
+\memberB(\sidB) & \majorB & \textsf{[待小组填写]} \\
+\bottomrule
+\end{tabular}
+\end{table}
+\footnotetext{\memberA{} 专业依团队背景(统计/数学 + 人工智能)推断,请最终核对。}
+
+% ============================================================
+\section{可复现性与运行环境}
+% ============================================================
+\textbf{硬约束遵守}:全程纯 CPU、无 GPU/CUDA;无任何付费数据(仅组合层面收益 + Ken French 公开免费数据);
+依赖仅 \texttt{numpy / pandas / matplotlib / scipy};固定随机种子(\texttt{np.random.seed(0)} /
+\texttt{default\_rng(0)})。
+
+\textbf{一键复现}(约 2 分钟,产出图 1--8 至 \texttt{outputs/}):
+\begin{verbatim}
+    uv sync                          # 安装依赖
+    uv run python reproduce_all.py   # 核心四图 + MLP + 五项扩展(图1-8)
+    uv run python _selftest_core.py  # 核心数值自测(6 项,含一般-η 守卫)
+\end{verbatim}
+环境:Python 3.14、numpy 2.4、pandas 3.0、matplotlib 3.10、scipy 1.17(版本锁于 \texttt{uv.lock} /
+\texttt{requirements.txt})。代码结构:\texttt{scs\_core}(核心数值,含统一一般-$\eta$ OOS-CV)、
+\texttt{scs\_data}(统一数据口径,含 \texttt{prepared\_ff25})、\texttt{dual\_penalty}(双惩罚扫描,含 train-Q
+选项)、\texttt{fig1--4}(核心图)、\texttt{mlp\_sdf}(图 5)、\texttt{gen\_shrinkage}(图 7)、
+\texttt{r2\_lookahead}(图 8)、\texttt{bootstrap\_ci}(R3)、\texttt{fig6\_ff25\_sparsity}(图 6)。
+
+% ============================================================
+\begin{thebibliography}{9}
+\small
+\bibitem{kns2020} Kozak, S., Nagel, S., \& Santosh, S. (2020). Shrinking the cross-section.
+\emph{Journal of Financial Economics}, 135(2), 271--292.
+\bibitem{kns2018} Kozak, S., Nagel, S., \& Santosh, S. (2018). Interpreting factor models.
+\emph{Journal of Finance}, 73(3), 1183--1223.
+\bibitem{ps2000} Pástor, \v{L}., \& Stambaugh, R. F. (2000). Comparing asset pricing models: An investment perspective.
+\emph{Journal of Financial Economics}, 56(3), 335--381.
+\bibitem{ff1993} Fama, E. F., \& French, K. R. (1993). Common risk factors in the returns on stocks and bonds.
+\emph{Journal of Financial Economics}, 33(1), 3--56.
+\bibitem{zou2005} Zou, H., \& Hastie, T. (2005). Regularization and variable selection via the elastic net.
+\emph{Journal of the Royal Statistical Society B}, 67(2), 301--320.
+\bibitem{lw2004} Ledoit, O., \& Wolf, M. (2004). A well-conditioned estimator for large-dimensional covariance matrices.
+\emph{Journal of Multivariate Analysis}, 88(2), 365--411.
+\bibitem{hj1991} Hansen, L. P., \& Jagannathan, R. (1991). Implications of security market data for models of dynamic economies.
+\emph{Journal of Political Economy}, 99(2), 225--262.
+\end{thebibliography}
+
+\end{document}
