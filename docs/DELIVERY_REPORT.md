@@ -4,6 +4,11 @@
 > 技术细节与每张图的完整中文解释见 [`REPLICATION_REPORT.md`](REPLICATION_REPORT.md);本报告聚焦
 > **交付概览、验收对照、运行方式与质量保证**。
 
+> **⚠️ 权威版本提示(2026 更新)**:本文记录的是早期阶段(核心四图 + 单个 MLP 延伸)的交付概览。最终课程
+> 交付物为 [`report/report.pdf`](../report/report.pdf)(11 页中文 LaTeX),在此之上新增**五项扩展**(R1-R4 + EXT)
+> 与 bootstrap CI,并更正了 look-ahead 与 MLP 的旧数值(详见 `REPLICATION_REPORT.md` 顶部提示)。一键复现
+> `reproduce_all.py` 现产出 fig1-8(约 2 分钟)。
+
 ---
 
 ## 一、一句话总结

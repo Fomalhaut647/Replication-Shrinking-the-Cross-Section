@@ -69,35 +69,44 @@ Comparison of original results from the paper and replication results from the P
 
 ---
 
-## 复现扩展(2026):核心结果 + 机器学习延伸
+## 复现扩展(2026):核心结果 + 机器学习延伸 + 五项扩展
 
-在原仓库 L2 复现之上,本次工作补全了论文的**四个核心结果**并加入一个**机器学习延伸**,
-全部纯 CPU、最小依赖、固定随机种子。详见 [`docs/REPLICATION_REPORT.md`](docs/REPLICATION_REPORT.md)(技术详解)
-与 [`docs/DELIVERY_REPORT.md`](docs/DELIVERY_REPORT.md)(交付报告)。
+在原仓库 L2 复现之上,本次工作复现论文**四个核心结果**、加入一个**机器学习延伸**,并新增**五项扩展与
+稳健性分析**,全部纯 CPU、最小依赖、固定随机种子。
+**最终课程报告(权威、含全部解读与分工)见 [`report/report.pdf`](report/report.pdf)**
+(LaTeX 源 `report/report.tex`,中文,`xelatex` 本地可编译)。
 
 ```bash
-uv run python reproduce_all.py   # 一键复现,产出全部图到 outputs/(约 85s)
+uv run python reproduce_all.py   # 一键复现,产出 fig1-8 到 outputs/(约 2 分钟)
+uv run python _selftest_core.py  # 核心数值自测(6 项,含一般-η 守卫)
 ```
 
-| 图 | 论文对应 | 文件 |
+| 图 | 论文对应 / 扩展 | 文件 |
 |----|----------|------|
-| L2 模型选择(IS/OOS/±se + P&S 对照) | Figure 4a | `outputs/fig1_l2_selection.png` |
+| L2 模型选择(IS/OOS/±se + **字面 η=1 对照**) | Figure 4a / **R4** | `outputs/fig1_l2_selection.png` |
 | L1–L2 双惩罚 OOS R² 等高线(raw + PC) | Figure 3a/3b | `outputs/fig2_dual_penalty_contour.png` |
 | SDF 系数在 PC 空间的分布 | Table 1b | `outputs/fig3_pc_coefficients.png` |
 | 稀疏 vs 稠密 OOS R²(+ Sharpe 对比) | Figure 4b | `outputs/fig4_sparsity_frontier.png` |
-| **MLP 延伸**:非线性自适应收缩 vs 线性 ridge | — | `outputs/fig5_mlp_extension.png` |
+| **MLP 延伸**:非线性自适应收缩 vs 线性 ridge | 机器学习延伸 | `outputs/fig5_mlp_extension.png` |
+| **广义收缩曲线**:学收缩形状 η(配 bootstrap CI) | **扩展 EXT** | `outputs/fig7_generalized_shrinkage.png` |
+| **去 look-ahead**:train-only Q vs 全样本 Q | **扩展 R2** | `outputs/fig8_r2_lookahead.png` |
+| **FF25 预备分析**:低维性 + 稀疏 vs 稠密(负对照) | **扩展 R1** | `outputs/fig6_ff25_sparsity.png` |
 
-**核心结论**:复现了"L2 收缩有效、稀疏性只在 PC 空间存在"的全部定性结果;MLP 延伸**诚实地未跑赢**
-线性收缩(OOS R² 0.083 vs 0.220),印证论文"信息分散、线性收缩已近最优"的主张。
+**核心结论**:复现"L2 收缩有效、相对收缩是关键、稀疏性只在 PC 空间存在"的全部定性结果;机器学习
+两条延伸(自由 MLP 与可学收缩形状 η)**均诚实地未取得统计显著的样本外提升**——EXT 学到的 η*≈3.6
+相对论文固定 η=2 的增益 +0.04 落在 bootstrap 95% CI 内(含 0),印证"信息分散、线性相对收缩已近最优"。
+扩展 R2 进一步表明纯 L2 的 PC 旋转 look-ahead 严格为 0、PC-sparse 结果未被抬高;R3 给出 η=2 的 OOS
+0.252 的 95% CI [0.014, 0.377](显著为正)。
 
 ## 仓库结构
 
 ```text
-入口    scs_main.py(阶段1 原样跑通)   reproduce_all.py(阶段2+3 一键复现)
-框架    scs_core / scs_data / scs_plot / dual_penalty
-出图    fig1-4_*.py   mlp_sdf.py        自测  _selftest_core.py
+入口    scs_main.py(阶段1 原样跑通)   reproduce_all.py(核心四图 + MLP + 五项扩展,一键复现)
+框架    scs_core(核心数值,含统一一般-η OOS-CV) / scs_data(含 prepared_ff25) / scs_plot / dual_penalty(含 train-Q 选项)
+出图    fig1-4_*.py  mlp_sdf.py(图5)  gen_shrinkage.py(图7/EXT)  r2_lookahead.py(图8/R2)  fig6_ff25_sparsity.py(图6/R1)  bootstrap_ci.py(R3)
+自测    _selftest_core.py(6 项)
 原仓库  SCS_L2est / cross_validate / utils / load_*.py
-文档    README.md   docs/(REPLICATION_REPORT · DELIVERY_REPORT · Task)
+文档    README.md   report/(report.tex/pdf,最终报告)   docs/(REPLICATION_REPORT · DELIVERY_REPORT · Task)
 数据    Data/    产物  outputs/    原始对照图  results_export/
 ```
 
