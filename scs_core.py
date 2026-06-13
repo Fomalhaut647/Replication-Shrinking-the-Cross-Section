@@ -198,6 +198,59 @@ def pc_space_l2(P, d, gamma, T):
     return b_P, se_P, mu_P
 
 
+def precompute_folds_eta(Rv, K):
+    """为一般-η 收缩族预计算每折的 PC 空间矩(每折 **只用训练块** 估特征向量 Q_tr)。
+
+    这是 R2/R4/EXT 共用的基座。对每个 fold:
+      Q_tr, d_tr = eigh(regcov(Rtr))           —— 训练块特征向量/值(降序),去 look-ahead
+      mu_P_tr    = Q_tr' · mean(Rtr)            —— 训练均值投到训练-PC 坐标
+      Sig_te_pc  = Q_tr' · regcov(Rte) · Q_tr   —— 测试协方差转到同一训练-PC 坐标
+      mu_te_pc   = Q_tr' · mean(Rte)
+    返回 list[(d_tr, mu_P_tr, Sig_te_pc, mu_te_pc)]。eigh 每折只算一次,供 κ×η 网格复用。
+
+    关键不变量:对 η=2,本预计算 + eta_oos 与 char 空间的 oos_cv_r2 **精确**相等(旋转等变;
+    见 _selftest_core 验证),故可安全用作 ridge 基线;对 η≠2 才显出旋转依赖,此时 train-only Q
+    是去 look-ahead 的正确口径。
+    """
+    Rv = np.asarray(Rv, float)
+    T = Rv.shape[0]
+    out = []
+    for te in cv_partition_contiguous(T, K):
+        tr = np.setdiff1d(np.arange(T), te)
+        Rtr, Rte = Rv[tr], Rv[te]
+        d, Q = np.linalg.eigh(regcov(Rtr))
+        order = np.argsort(d)[::-1]
+        d, Q = d[order], Q[:, order]
+        out.append((d, Q.T @ Rtr.mean(0), Q.T @ regcov(Rte) @ Q, Q.T @ Rte.mean(0)))
+    return out
+
+
+def eta_oos(folds_eta, gamma2, eta=2.0, K=3, kfold_adjust=True, weights=None):
+    """一般-η 收缩族的 OOS-CV,返回 (OOS_R2, se_OOS)。
+
+    PC 空间收缩(论文式24 的一般化,见式18-22 推导):
+        b_P,j = μ_P,j / (d_j + γ · d_j^{2-η})
+              = w_j · (μ_P,j / d_j),   w_j = d_j^{η-1}/(d_j^{η-1}+γ)   作用在 OLS 系数上的收缩权重
+      η=2 -> 分母 d_j+γ,relative 收缩(论文基线 ridge);
+      η=1 -> 分母 d_j(1+γ),level 收缩(字面 Pástor-Stambaugh,所有 PC 等比例);
+      η=0 -> 对低方差 PC 几乎不收缩(近似套利,论文论证不合理)。
+    可选 weights:长度 N 的自定义收缩权重 w_j∈[0,1](EXT 的单调收缩曲线用),给定时
+      b_P,j = weights_j · (μ_P,j / d_j),覆盖 η 公式。
+    γ 随折按 1/(1-1/K) 放大以对齐 κ 口径(与 oos_cv_r2 一致)。
+    """
+    f = 1.0 / (1.0 - 1.0 / K) if kfold_adjust else 1.0
+    g = gamma2 * f
+    oos = []
+    for (d, mu_P, Sig_te_pc, mu_te_pc) in folds_eta:
+        if weights is None:
+            b_P = mu_P / (d + g * np.power(d, 2.0 - eta))
+        else:
+            b_P = np.asarray(weights, float) * (mu_P / d)
+        oos.append(csr2(Sig_te_pc @ b_P, mu_te_pc))
+    oos = np.array(oos)
+    return float(np.mean(oos)), float(np.std(oos) / np.sqrt(len(oos)))
+
+
 def oos_cv_r2(folds_data, gamma2, gamma1=0.0, K=3, kfold_adjust=True, warm=None):
     """在预计算的 folds 上做 OOS-CV,返回 (IS_R2, OOS_R2, se_OOS)。
 

@@ -70,4 +70,31 @@ print(f"  OOS 峰值 = {oos[imax]:.4f} @ κ = {kappas[imax]:.4f}")
 assert 0.20 < oos[imax] < 0.30 and 0.18 < kappas[imax] < 0.45, "OOS 曲线与阶段1不符!"
 print("  PASS: 口径与原仓库 cross_validate 一致")
 
-print("\n=== 全部自测通过:scs_core 数值地基可靠 ===")
+# ====== 测试5: eta_oos(η=2) 与 oos_cv_r2(ridge) 精确相等(EXT/R4/R2 共用核心的回归守卫) ======
+print(f"\n[测试5] eta_oos(η=2, train-only Q) == oos_cv_r2(char ridge)  —— EXT/R4/R2 基座")
+folds_eta = C.precompute_folds_eta(Rv, 3)
+mx = 0.0
+for k in np.logspace(np.log10(0.05), np.log10(1.0), 20):
+    g = C.kappa_to_gamma(k, Sigma, T, freq)
+    _, o_ridge, _ = C.oos_cv_r2(folds, g, 0.0, K=3)
+    o_eta2, _ = C.eta_oos(folds_eta, g, eta=2.0, K=3)
+    mx = max(mx, abs(o_ridge - o_eta2))
+print(f"  max|eta_oos(η=2) - oos_cv_r2| = {mx:.2e}  (η=2 旋转等变,应 ~1e-15)")
+assert mx < 1e-10, "eta_oos(η=2) 未精确退化为 ridge!"
+print("  PASS: 一般-η 核心在 η=2 精确等于纯 L2(基线可比,字面 η=1/学 η 建于此)")
+
+# ====== 测试6: 字面 η=1 == level 收缩(均匀缩放 OLS) ======
+print(f"\n[测试6] eta_oos(η=1) 字面 level 收缩自洽性")
+g = C.kappa_to_gamma(0.05, Sigma, T, freq)  # 某惩罚
+o_eta1, _ = C.eta_oos(folds_eta, g, eta=1.0, K=3)
+# 手算:每折 b=(1/(1+γf))·Σ_tr^{-1}μ_tr,OOS csr2
+f = 1.0 / (1.0 - 1.0 / 3)
+man = []
+for (Xtr, ytr, Xte, yte) in folds:
+    b = (1.0 / (1.0 + g * f)) * np.linalg.solve(Xtr, ytr)
+    man.append(C.csr2(Xte @ b, yte))
+print(f"  eta_oos(η=1)={o_eta1:.6f}  手算 level={np.mean(man):.6f}  diff={abs(o_eta1-np.mean(man)):.2e}")
+assert abs(o_eta1 - np.mean(man)) < 1e-9, "字面 η=1 与均匀缩放 OLS 不一致!"
+print("  PASS: 字面 η=1 严格等于对 OLS 系数等比例(level)收缩 1/(1+γ)")
+
+print("\n=== 全部自测通过:scs_core 数值地基可靠(含 EXT/R4/R2 一般-η 核心)===")

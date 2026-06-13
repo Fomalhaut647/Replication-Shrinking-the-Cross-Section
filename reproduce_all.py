@@ -73,6 +73,43 @@ def main(daily=True):
     print(f"  线性 ridge OOS R²={r5['lin_oos'].mean():.4f}  |  Tiny MLP={r5['mlp_oos'].mean():.4f}  "
           f"(Δ={r5['mlp_oos'].mean()-r5['lin_oos'].mean():+.4f}, MLP 未跑赢 -> 印证线性近最优)")
 
+    banner('图6 (扩展 R1) — FF25 预备分析:低维性 + 稀疏 vs 稠密')
+    import fig6_ff25_sparsity as F6
+    r6 = F6.compute(daily=daily)
+    np.savez('outputs/fig6_data.npz', ks_c=r6['ks_c'], best_c=r6['best_c'],
+             ks_p=r6['ks_p'], best_p=r6['best_p'])
+    F6.plot(r6)
+    print(f"  FF25 top-3 PC 方差占比={r6['cum_ff'][2]:.0%}; OOS 网格峰值≈{r6['res_p']['R2'].max():.3f}"
+          f"(去市场残差时变,OOS≈0,负对照)")
+
+    banner('图7 (扩展 EXT) — 广义收缩曲线:学收缩形状 η')
+    import gen_shrinkage as F7
+    r7 = F7.compute(daily=daily)
+    np.savez('outputs/fig7_data.npz', etas=r7['etas'], best=r7['best'],
+             eta_star=r7['eta_star'], oos_star=r7['oos_star'], oos_eta2=r7['oos_eta2'])
+    F7.plot(r7)
+    print(f"  学到 η*={r7['eta_star']:.2f}(OOS={r7['oos_star']:.4f}) vs 论文固定 η=2"
+          f"(OOS={r7['oos_eta2']:.4f}),增益 {r7['oos_star']-r7['oos_eta2']:+.4f}")
+
+    banner('图8 (扩展 R2) — 去 look-ahead:train-only Q')
+    import r2_lookahead as F8
+    r8 = F8.compute(daily=daily)
+    np.savez('outputs/fig8_data.npz', l2_diff=r8['l2_diff'],
+             pcsparse_full=r8['pcsparse_full'], pcsparse_tr=r8['pcsparse_tr'])
+    F8.plot(r8)
+    print(f"  纯 L2 旋转不变 |diff|={r8['l2_diff']:.1e}(精确0); "
+          f"PC-sparse full-Q={r8['pcsparse_full']:.3f} vs train-Q={r8['pcsparse_tr']:.3f}(未抬高)")
+
+    banner('扩展 R3 — 分块 bootstrap 置信区间')
+    import bootstrap_ci as B3
+    rb = B3.run(daily=daily, n_boot=300, block_len=21)
+    np.savez('outputs/bootstrap_ci.npz', etas=np.array(rb['etas']),
+             **{f'boot_eta{e}': rb['boot'][e] for e in rb['etas']}, delta=rb.get('delta', np.array([])))
+    lo2, hi2 = rb['ci'][2.0]
+    dlt = rb['delta']; dlo, dhi = np.percentile(dlt, 2.5), np.percentile(dlt, 97.5)
+    print(f"  η=2 OOS={rb['point'][2.0]:.3f} 95%CI=[{lo2:.3f},{hi2:.3f}](显著>0); "
+          f"Δ(η*-η2)95%CI=[{dlo:+.3f},{dhi:+.3f}]{'含0,不显著' if dlo<=0<=dhi else '显著'}")
+
     banner(f'完成 — 用时 {time.time()-t0:.1f}s,全部图见 outputs/')
     import os
     for f in sorted(os.listdir('outputs')):

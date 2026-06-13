@@ -17,7 +17,10 @@ import scs_core as C
 from scs_data import prepared
 
 
-def scan(space='char', daily=True, nkappa=26, ngamma1=42, kappa_lo=0.05, kappa_hi=3.0, D=None):
+def scan(space='char', daily=True, nkappa=26, ngamma1=42, kappa_lo=0.05, kappa_hi=3.0,
+         D=None, pc_trainQ=False):
+    """双惩罚网格扫描。pc_trainQ=True 且 space='pc' 时,OOS 折用 **每折 train-only 的 Q**
+    旋转(去 look-ahead,扩展 R2);x 轴非零数仍用全样本 enet 定义,故 κ/稀疏度标尺不变。"""
     if D is None:
         D = prepared(daily=daily)
     T, freq, N, K = D['T'], D['freq'], D['N'], D['K']
@@ -27,7 +30,17 @@ def scan(space='char', daily=True, nkappa=26, ngamma1=42, kappa_lo=0.05, kappa_h
         Pm = D['P']
         Sig = C.regcov(Pm)
         mu = Pm.mean(0)
-        folds = C.precompute_folds(Pm, K)
+        if pc_trainQ:
+            folds = []
+            allidx = np.arange(T)
+            for te in C.cv_partition_contiguous(T, K):
+                tr = np.setdiff1d(allidx, te)
+                Rtr, Rte = D['Rv'][tr], D['Rv'][te]
+                _, _, Qtr = C.pc_rotate(Rtr)              # 训练块特征向量
+                Ptr, Pte = Rtr @ Qtr, Rte @ Qtr           # 测试块用训练 Q 投影
+                folds.append((C.regcov(Ptr), Ptr.mean(0), C.regcov(Pte), Pte.mean(0)))
+        else:
+            folds = C.precompute_folds(Pm, K)
     else:
         raise ValueError(space)
 

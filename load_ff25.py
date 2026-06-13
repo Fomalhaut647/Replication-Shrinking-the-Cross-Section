@@ -30,8 +30,11 @@ def load_ff25(datapath, daily, t0=None, tN=None):
 
     # Extract required columns and perform operations
     dates = DATA['Date']
-    mkt = DATA['Mkt_RF'] / 100
-    ret = DATA.iloc[:, 5:30].divide(100) - DATA['RF'] / 100
+    # 因子列实际名为 'Mkt-RF'(连字符),原写 'Mkt_RF'(下划线)会 KeyError。
+    mkt = DATA['Mkt-RF'] / 100
+    # 25 个组合收益需按行减去无风险利率 RF(转超额收益)。原写 DataFrame - Series 会把
+    # RF 的行索引对齐到组合列名 -> 全 NaN;必须 .sub(..., axis=0) 沿行广播。
+    ret = DATA.iloc[:, 5:30].divide(100).sub(DATA['RF'] / 100, axis=0)
     labels = RET.columns[1:].tolist()
 
     return dates, ret, mkt, DATA, labels
