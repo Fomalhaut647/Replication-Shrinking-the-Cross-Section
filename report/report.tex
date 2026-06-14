@@ -14,7 +14,9 @@
 \usepackage{array}
 \usepackage[hidelinks]{hyperref}
 \usepackage{xeCJK}
+\usepackage[protrusion=true]{microtype}  % 收掉零星 overfull(字符突出)
 \geometry{margin=2.4cm}
+\setlength{\emergencystretch}{3em}        % 末路伸缩,消除参考文献等零星 overfull
 \captionsetup{font=small,labelfont=bf}
 
 % CJK font only for the Chinese author names (fandol not installed; use AR PL UMing).
@@ -93,7 +95,8 @@ minimal-dependency, and seed-fixed.
 All data are \textbf{portfolio-level returns} or freely available Ken French data; there are \textbf{no paid
 sources} (no WRDS / CRSP / Compustat / IBES).
 \begin{itemize}
-  \item \textbf{50 anomaly long--short portfolios} (the main dataset, \texttt{managed\_portfolios\_anom\_d\_50.csv}):
+  \item \textbf{50 anomaly long--short portfolios} (main dataset,
+  \texttt{managed\_\allowbreak portfolios\_\allowbreak anom\_\allowbreak d\_50.csv}):
   daily, 1963-07 to 2017-12, $T\approx 11{,}000$. Each column is the return of a zero-investment long--short
   portfolio sorted on one anomaly characteristic, plus the market excess return \texttt{rme}. This is the
   battleground of the paper's Section 4.2, Figures 3/4, and Table 1.
@@ -181,6 +184,7 @@ Table~\ref{tab:numbers} summarizes the key numbers against the paper.
 
 \begin{table}[H]\centering\small
 \caption{Core replication numbers vs.\ the paper (50 anomalies, daily)}\label{tab:numbers}
+\resizebox{\textwidth}{!}{%
 \begin{tabular}{lcc}
 \toprule
 Quantity & This replication & Paper \\
@@ -191,7 +195,7 @@ Order of PCs by $|t|$ (Fig.~3) & PC5, PC1, PC2, PC4, PC11\dots & PC5, PC1, PC2, 
 PC-sparse 4-factor OOS (Fig.~4) & $0.209$ & $\approx0.18$ \\
 Char-sparse 4-factor OOS (Fig.~4) & $0.020$ & low \\
 \bottomrule
-\end{tabular}
+\end{tabular}}
 \end{table}
 
 \subsection{Figure 1 --- L2 model selection}
@@ -378,7 +382,7 @@ $\sim10^{-15}$); the PC-sparse global optimum under train-only $Q$ is no lower t
 backbone results are not inflated.}\label{fig:fig8}
 \end{figure}
 
-\subsection{R1 --- FF25 preliminary analysis (a negative control and low-dimensionality)}\label{sec:r1}
+\subsection{R1 --- FF25 preliminary analysis (a negative control)}\label{sec:r1}
 The paper's Section 4.1 uses FF25 --- a low-dimensional ``known-answer'' setting --- to check that the method
 recovers an SMB/HML-like few-factor SDF. We run the \textbf{exact same} KNS pipeline as for the 50 anomalies on
 FF25 (same 1963--2017 window) and find (Figure~\ref{fig:fig6}):
@@ -426,7 +430,7 @@ This is \textbf{Group 3}; the members and the division of labor are as follows.
 
 \begin{table}[H]\centering\small
 \caption{Group members and division of labor (Group 3)}
-\begin{tabular}{p{3.4cm} p{3.2cm} p{8.0cm}}
+\begin{tabular}{>{\raggedright\arraybackslash}p{3.7cm} >{\raggedright\arraybackslash}p{3.5cm} p{7.0cm}}
 \toprule
 Name (ID) & Major & Main responsibilities \\
 \midrule
@@ -449,11 +453,13 @@ available Ken French data); dependencies limited to \texttt{numpy / pandas / mat
 seeds (\texttt{np.random.seed(0)} / \texttt{default\_rng(0)}).
 
 \textbf{One-click reproduction} (about 2 minutes, producing Figures 1--8 in \texttt{outputs/}):
+{\small
 \begin{verbatim}
-    uv sync                          # install dependencies
-    uv run python reproduce_all.py   # four core figures + MLP + five extensions (Fig. 1-8)
-    uv run python _selftest_core.py  # numerical self-tests (6 checks, incl. general-eta guards)
+uv sync                          # install dependencies
+uv run python reproduce_all.py   # Fig. 1-8 in outputs/ (~2 min)
+uv run python _selftest_core.py  # 6 numerical self-tests
 \end{verbatim}
+}
 Environment: Python 3.14, numpy 2.4, pandas 3.0, matplotlib 3.10, scipy 1.17 (versions locked in \texttt{uv.lock} /
 \texttt{requirements.txt}). Code layout: \texttt{scs\_core} (numerical core, incl.\ the unified general-$\eta$
 OOS-CV), \texttt{scs\_data} (unified data pipeline, incl.\ \texttt{prepared\_ff25}), \texttt{dual\_penalty}
